@@ -24,8 +24,8 @@ Welcome! We offer:
 
 *Prices:*
 - Standard: KES 3,500/night
-- Deluxe: KES 5,000/night
-- Executive Suite: KES 8,500/night
+- Deluxe: KES 4,500/night
+- Executive Suite: KES 6,500/night
 
 Reply *YES* (or type "reception") if you'd like me to connect you to our receptionist.`;
 
@@ -141,3 +141,4 @@ client.on('message', async msg => {
 });
 
 client.initialize();
+
