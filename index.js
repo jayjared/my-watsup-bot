@@ -61,8 +61,8 @@ client.on('message', async msg => {
       try {
         const r1 = MessageMedia.fromFilePath('./media/room1.jpg');
         const r2 = MessageMedia.fromFilePath('./media/room2.jpg');
-        await client.sendMessage(chatId, r1, { caption: '🏨 Deluxe Room - KES 5,000/night' });
-        await client.sendMessage(chatId, r2, { caption: '🏨 Executive Suite - KES 8,500/night' });
+        await client.sendMessage(chatId, r1, { caption: '🏨 Deluxe Room - KES 4500/night' });
+        await client.sendMessage(chatId, r2, { caption: '🏨 Executive Suite - KES 6,500/night' });
       } catch (e) {
         console.log('room images not found or error sending rooms:', e.message);
       }
@@ -141,4 +141,5 @@ client.on('message', async msg => {
 });
 
 client.initialize();
+
 
