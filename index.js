@@ -1,84 +1,143 @@
+// index.js
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
-// Create bot with saved auth session
+// receptionist in Kenya format
+const RECEPTIONIST_NUMBER = '254798596533@c.us'; // 0798596533 -> 254798596533@c.us
+
 const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+  authStrategy: new LocalAuth(),
+  puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
-// Show QR for login
+const greeted = new Set(); // tracks which chats got the intro (in-memory)
+
+// hotel content
+const HOTEL_INTRO = `🏨 *Zion Gardens Hotel* — *Haven of Comfort and Luxury*
+
+Welcome! We offer:
+- 🛏️ Accommodation (Standard, Deluxe, Executive)
+- 🍽️ Restaurant & Bar
+- 🏊 Swimming Pool
+- 🎉 Events & Conferences
+- 🚗 Secure Parking
+
+*Prices:*
+- Standard: KES 3,500/night
+- Deluxe: KES 5,000/night
+- Executive Suite: KES 8,500/night
+
+Reply *YES* (or type "reception") if you'd like me to connect you to our receptionist.`;
+
 client.on('qr', qr => {
-    qrcode.generate(qr, { small: true });
+  console.log('Scan this QR code to log in:');
+  qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
-    console.log('✅ Zion Gardens Hotel WhatsApp Bot is ready!');
+  console.log('✅ Zion Gardens Hotel Bot ready!');
 });
 
-// Receptionist number
-const receptionistNumber = "254798596533@c.us"; // Kenya format without +
-
-let greetedUsers = new Set();
-
-// Hotel intro message
-const hotelIntro = `
-🏨 *Welcome to Zion Gardens Hotel* – Haven of Comfort and Luxury 🌟
-
-We offer:
-- 🛏️ Elegant Rooms
-- 🍽️ Restaurant with diverse menu
-- 🏊 Swimming Pool
-- 🎉 Event Hosting & Conferences
-- 🚗 Secure Parking
-
-💰 *Prices*:
-- standard Room: KES 3,500/night
-- deluxe Room: KES 4,500/night
-- executive room: KES 6,500/night
-- Conference Hall: From KES 15,000/day
-
-Reply *YES* if you'd like to connect with our receptionist.
-`;
-
-// Handle messages
 client.on('message', async msg => {
-    const chatId = msg.from;
+  try {
+    const chatId = msg.from; // e.g., "2547...@c.us"
+    const text = (msg.body || '').trim();
 
-    // First time greeting
-    if (!greetedUsers.has(chatId)) {
-        greetedUsers.add(chatId);
+    // 1) Auto-introduction (first time this chat sends a message)
+    if (!greeted.has(chatId)) {
+      greeted.add(chatId);
 
-        // Send intro text
-        await client.sendMessage(chatId, hotelIntro);
+      // send intro text
+      await client.sendMessage(chatId, HOTEL_INTRO);
 
-        // Send images
+      // send images if present in repo/media
+      try {
         const menu = MessageMedia.fromFilePath('./media/menu.jpg');
-        const room1 = MessageMedia.fromFilePath('./media/room1.jpg');
-        const room2 = MessageMedia.fromFilePath('./media/room2.jpg');
+        await client.sendMessage(chatId, menu, { caption: '📜 Our Menu' });
+      } catch (e) {
+        console.log('menu image not found or error sending menu:', e.message);
+      }
 
-        await client.sendMessage(chatId, menu, { caption: "📜 Our Menu" });
-        await client.sendMessage(chatId, room1, { caption: "🏨 Deluxe Room" });
-        await client.sendMessage(chatId, room2, { caption: "🏨 Executive Room" });
-
-        return;
+      try {
+        const r1 = MessageMedia.fromFilePath('./media/room1.jpg');
+        const r2 = MessageMedia.fromFilePath('./media/room2.jpg');
+        await client.sendMessage(chatId, r1, { caption: '🏨 Deluxe Room - KES 5,000/night' });
+        await client.sendMessage(chatId, r2, { caption: '🏨 Executive Suite - KES 8,500/night' });
+      } catch (e) {
+        console.log('room images not found or error sending rooms:', e.message);
+      }
+      return; // done with auto-intro
     }
 
-    // If user says YES → forward to receptionist
-    if (msg.body.trim().toLowerCase() === "yes") {
-        await client.sendMessage(chatId, "✅ Connecting you to our receptionist now…");
+    // 2) If user wants receptionist (YES / reception / connect)
+    const lc = text.toLowerCase();
+    if (lc === 'yes' || lc.includes('reception') || lc.includes('connect')) {
+      // confirm to guest
+      await client.sendMessage(chatId, '✅ Connecting you to our receptionist now…');
 
-        const contact = await msg.getContact();
-        const guestName = contact.pushname || "Guest";
+      // collect guest info
+      const contact = await msg.getContact();
+      const guestName = contact.pushname || 'Guest';
+      const guestNumber = contact.number || msg.from; // fallback
 
-        const forwardMsg = `📩 *New Booking Request from WhatsApp Bot*
-Name: ${guestName}
-Number: ${contact.number}
-Message: Interested in booking at Zion Gardens Hotel.`;
+      const forward = `📩 *New Booking Request (via bot)*\nName: ${guestName}\nNumber: ${guestNumber}\nMessage: ${text}`;
 
-        await client.sendMessage(receptionistNumber, forwardMsg);
+      // send to receptionist
+      await client.sendMessage(RECEPTIONIST_NUMBER, forward);
+
+      // optional: notify guest that receptionist was notified
+      await client.sendMessage(chatId, '📞 Our receptionist has been notified and will contact you shortly.');
+      return;
     }
+
+    // 3) Command-style quick answers
+    if (lc === '!about' || lc === 'about') {
+      await client.sendMessage(chatId, HOTEL_INTRO);
+      return;
+    }
+
+    if (lc === '!services' || lc === 'services') {
+      await client.sendMessage(chatId, '🛎️ Services: Accommodation, Restaurant & Bar, Events, Conference Halls, Airport Transfer.');
+      return;
+    }
+
+    if (lc === '!prices' || lc === 'prices') {
+      await client.sendMessage(chatId, '💰 Prices: Standard KES 3,500 | Deluxe KES 5,000 | Executive KES 8,500');
+      return;
+    }
+
+    if (lc === '!menu' || lc === 'menu') {
+      try {
+        const menu = MessageMedia.fromFilePath('./media/menu.jpg');
+        await client.sendMessage(chatId, menu, { caption: '🍽️ Our Menu' });
+      } catch {
+        await client.sendMessage(chatId, 'Menu image not available right now.');
+      }
+      return;
+    }
+
+    if (lc === '!rooms' || lc === 'rooms') {
+      try {
+        const r1 = MessageMedia.fromFilePath('./media/room1.jpg');
+        const r2 = MessageMedia.fromFilePath('./media/room2.jpg');
+        await client.sendMessage(chatId, r1);
+        await client.sendMessage(chatId, r2);
+      } catch {
+        await client.sendMessage(chatId, 'Room images are not available right now.');
+      }
+      return;
+    }
+
+    // 4) Fallback friendly message
+    await client.sendMessage(chatId, `I can help with:
+- Type *!about* for hotel intro
+- *!services* for services
+- *!prices* for prices
+- *!menu* or *!rooms* to see images
+- Type *YES* to connect to receptionist.`);
+  } catch (err) {
+    console.error('Error handling message:', err);
+  }
 });
 
 client.initialize();
-
